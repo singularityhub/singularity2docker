@@ -23,51 +23,41 @@
 set -o errexit
 set -o nounset
 
-USAGE="USAGE: singularity2docker [-m \"message\"] [options] container.simg"
+usage="USAGE: singularity2docker -n container:new container.simg"
 
 # --- Option processing --------------------------------------------
 if [ $# == 0 ] ; then
-    echo $USAGE
+    echo $usage
     echo "OPTIONS:
 
-          -m: commit message
-          -n: docker container name (container:new)
-          -e: extra environment variables to add
+          -n|--name: docker container name (container:new)
 
-              "
-
+          "
     exit 1;
 fi
 
-
-message="produced by singularity2docker.sh $(date)"
 container="container:new"
-while getopts ':hm:n' option; do
 
-  case "$option" in
-    h|-h|--help) 
-        echo "$USAGE"
-        exit 0
-    ;;
-    --message|m|-m) 
-        message="${OPTARG}"
-    ;;
-    --name|n|-n) 
-        container="${OPTARG}"
-    ;;
-    :) 
-        printf "missing argument for -%s\n" "${OPTARG}" >&2
-        echo "$usage" >&2
-        exit 1
-   ;;
-   \?) 
-        printf "illegal option: -%s\n" "${OPTARG}" >&2
-        echo "$usage" >&2
-        exit 1
-    ;;
-  esac
+while true; do
+    case ${1:-} in
+        -h|--help|help)
+            echo ${usage};
+            exit 1;
+        ;;
+        --name|-n|n)
+            shift
+            container="${1:-}";
+            shift
+        ;;
+        -*)
+            echo "Beep boop, unknown option: ${1:-}"
+            exit 1
+        ;;
+        *)
+            break;
+        ;;
+    esac
 done
-shift $((OPTIND - 1))
 
 image=$1
 
@@ -75,9 +65,13 @@ echo ""
 echo "Input Image: ${image}"
 
 
+
 ################################################################################
 ### Sanity Checks ##############################################################
 ################################################################################
+
+echo
+echo "1. Checking for software dependencies, Singularity and Docker..."
 
 # The image must exist
 
@@ -107,51 +101,77 @@ fi
 
 
 ################################################################################
-### Image Sandbox Export #######################################################
+### Image Format ###############################################################
 ################################################################################
 
-
-echo "Preparing build sandbox!"
-sandbox=$(mktemp -d -t singularity2docker.XXXXXX)
-singularity build --sandbox ${sandbox} ${image}
-
 # Get the image format
+# This is here in case we want to remove Singularity dependency and just work
+# with mksquashfs/unsquashfs. Most users that want to convert from Singularity
+# will likely have it installed.
 # We shouldn't need this as long as older formats are supported to build from
+# If we can just use unsquashfs after this we probably don't need Singularity 
+# dependency
 
 #libexec=$(dirname $(singularity selftest 2>&1 | grep 'lib' | awk '{print $4}' | sed -e 's@\(.*/singularity\).*@\1@'))
 #image_type="$(echo $libexec | awk '{print $1}')/singularity/bin/image-type"
 #image_format=$(SINGULARITY_MESSAGELEVEL=0 ${image_type} ${image})
 #echo "Found image format ${image_format}"
 
-retval=$?
 
-if [ ! retval -eq "0" ]; then
-    echo "There was an error building the sandbox, debug
-          singularity build --sandbox ${sandbox} ${image}"
-    exit 1
-fi
+################################################################################
+### Image Sandbox Export #######################################################
+################################################################################
+
+echo
+echo "2.  Preparing sandbox for export..."
+sandbox=$(mktemp -d -t singularity2docker.XXXXXX)
+singularity build --sandbox ${sandbox} ${image} > /dev/null 2>&1
+
 
 ################################################################################
 ### Environment/Metadata #######################################################
 ################################################################################
 
-# Command will be to source the environment and run the runscript!
-CMD="\". /environment && exec /.singularity.d/runscript\""
+echo
+echo "3.  Exporting metadata..."
+
+# Create temporary Dockerfile
+
+echo 'FROM scratch
+ADD . /' > ${sandbox}/Dockerfile
+
+# Environment
+
+echo "ENV LD_LIBRARY_PATH /.singularity.d/libs" >> $sandbox/Dockerfile
+echo "ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> $sandbox/Dockerfile
+
 
 # Labels
-labels=""
+
 keys=$(singularity inspect -l ${image} | jq 'keys[]')
 for key in ${keys}; do
     term=".${key}"
     value=$(singularity inspect -l ${image} | jq -r ${term})
-    labels="${labels} LABEL ${key} \"${value}\""
     echo "Adding LABEL ${key} ${value}"
+    echo "LABEL ${key} \"${value}\"" >> $sandbox/Dockerfile
 done
 
+# Command will be to source the environment and run the runscript!
+
+echo "Adding command..."
+echo '#!/bin/sh
+. /environment
+exec /.singularity.d/runscript' > ${sandbox}/run_singularity2docker.sh
+echo "CMD [\"/bin/bash\", \"run_singularity2docker.sh\"]" >> $sandbox/Dockerfile
 
 ################################################################################
 ### Build ######################################################################
 ################################################################################
 
-layer=$(sudo tar -c ${sandbox} | docker import --change "CMD ${CMD} $labels" --message "${message}" - ${container})
-echo "Created layer ${layer}"
+echo
+echo "4.  Build away, Merrill!"
+
+docker build -t ${container} ${sandbox} > /dev/null 2>&1
+echo "Created container ${container}"
+echo "docker inspect ${container}"
+rm -rf ${sandbox}
