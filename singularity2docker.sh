@@ -76,29 +76,28 @@ echo "1. Checking for software dependencies, Singularity and Docker..."
 
 # The image must exist
 
+
 if [ ! -e "${image}" ]; then
     echo "Cannot find ${image}, did you give the correct path?"
     exit 1
 fi
 
 
-# Singularity must be installed
+function is_installed () {
+    software=${1}
+    if hash ${software} 2>/dev/null; then
+        echo "Found ${software} $(${software} --version)"
+    else
+        echo "${software} must be installed to use singularity2docker.sh"
+        exit 1
+    fi
+}
 
-if hash singularity 2>/dev/null; then
-   echo "Found Singularity $(singularity --version)"
-else
-   echo "Singularity must be installed to use singularity2docker.sh"
-   exit 1
-fi
 
-# Docker must be installed
-
-if hash docker 2>/dev/null; then
-   echo "Found Docker $(docker --version)"
-else
-   echo "Docker must be installed to use singularity2docker.sh"
-   exit 1
-fi
+# Singularity, Docker, and jq must be installed
+is_installed singularity
+is_installed docker
+is_installed jq
 
 
 ################################################################################
@@ -167,7 +166,7 @@ done
 echo "Adding command..."
 echo '#!/bin/sh
 . /environment
-exec /.singularity.d/runscript' > ${sandbox}/run_singularity2docker.sh
+exec /.singularity.d/runscript "$@"' > ${sandbox}/run_singularity2docker.sh
 echo "CMD [\"/bin/bash\", \"run_singularity2docker.sh\"]" >> $sandbox/Dockerfile
 
 ################################################################################
