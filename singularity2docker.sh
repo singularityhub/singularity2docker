@@ -31,7 +31,6 @@ if [ $# == 0 ] ; then
     echo "OPTIONS:
 
           -n|--name: docker container name (container:new)
-          -v|--verbose: show output from sandbox build
 
           "
     exit 1;
@@ -99,7 +98,6 @@ is_installed singularity
 is_installed docker
 is_installed jq
 
-
 ################################################################################
 ### Image Format ###############################################################
 ################################################################################
@@ -125,6 +123,7 @@ is_installed jq
 echo
 echo "2.  Preparing sandbox for export..."
 sandbox=$(mktemp -d -t singularity2docker.XXXXXX)
+rmdir $sandbox
 singularity build --sandbox ${sandbox} ${image}
 
 ################################################################################
@@ -149,14 +148,11 @@ echo "ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> 
 
 # Note: Singularity has not been consistent with output of metadata
 # If you have issues here, you might need to tweak the jq parsing below
-entries=$(singularity inspect -l --json ${image} | jq '.attributes .labels')
-keys=$(echo $entries | jq 'keys[]')
+entries=$(singularity inspect -l --json ${image} | jq -r '.attributes .labels')
+keys=$(echo $entries | jq -r 'keys[]')
 
 for key in ${keys}; do
-
- echo "$opt" | tr -d '"'
-
-    value=$(singularity inspect -l --json ${image} | jq -r ${term})
+    value=$(singularity inspect -l --json ${image} | jq -r ".attributes .labels[\"${key}\"]")
     echo "Adding LABEL ${key} ${value}"
     echo "LABEL ${key} \"${value}\"" >> $sandbox/Dockerfile
 done
@@ -176,7 +172,7 @@ echo "CMD [\"/bin/bash\", \"run_singularity2docker.sh\"]" >> $sandbox/Dockerfile
 echo
 echo "4.  Build away, Merrill!"
 
-docker build -t ${container} ${sandbox} > /dev/null 2>&1
+docker build -t ${container} ${sandbox}
 echo "Created container ${container}"
 echo "docker inspect ${container}"
 rm -rf ${sandbox}
