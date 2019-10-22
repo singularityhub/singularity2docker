@@ -4,11 +4,11 @@ This is a simple script to convert a Singularity image back to Docker, preservin
 environment, labels, and runscript. The usage is as follows:
 
 ```bash
-./singularity2docker.sh -n newcontainer:tag singularity-container.simg
+./singularity2docker.sh -n newcontainer:tag singularity-container.sif
 ```
 
 The above says "Create a new container called newcontainer:tag (-n == name) from
-the Singularity container singularity-container.simg
+the Singularity container singularity-container.sif
 
 ## Example
 
@@ -153,7 +153,7 @@ $ docker inspect newcontainer:tag
 ```
 $ docker run newcontainer:tag
 RaawwWWWWWRRRR!!
-$ singularity run singularity-container.simg 
+$ singularity run singularity-container.sif
 RaawwWWWWWRRRR!!
 ```
 

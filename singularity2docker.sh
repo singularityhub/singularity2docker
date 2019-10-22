@@ -3,9 +3,9 @@
 # singularity2docker.sh will convert a singularity image back into a docker
 # image.
 #
-# USAGE: singularity2docker.sh ubuntu.simg
+# USAGE: singularity2docker.sh ubuntu.sif
 #
-# Copyright (C) 2018 Vanessa Sochat.
+# Copyright (C) 2018-2020 Vanessa Sochat.
 #
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by
@@ -31,6 +31,7 @@ if [ $# == 0 ] ; then
     echo "OPTIONS:
 
           -n|--name: docker container name (container:new)
+          -v|--verbose: show output from sandbox build
 
           "
     exit 1;
@@ -125,8 +126,7 @@ fi
 echo
 echo "2.  Preparing sandbox for export..."
 sandbox=$(mktemp -d -t singularity2docker.XXXXXX)
-singularity build --sandbox ${sandbox} ${image} > /dev/null 2>&1
-
+singularity build --sandbox ${sandbox} ${image}
 
 ################################################################################
 ### Environment/Metadata #######################################################
@@ -148,10 +148,16 @@ echo "ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> 
 
 # Labels
 
-keys=$(singularity inspect -l ${image} | jq 'keys[]')
+# Note: Singularity has not been consistent with output of metadata
+# If you have issues here, you might need to tweak the jq parsing below
+entries=$(singularity inspect -l --json ${image} | jq '.attributes .labels')
+keys=$(echo $entries | jq 'keys[]')
+
 for key in ${keys}; do
-    term=".${key}"
-    value=$(singularity inspect -l ${image} | jq -r ${term})
+
+ echo "$opt" | tr -d '"'
+
+    value=$(singularity inspect -l --json ${image} | jq -r ${term})
     echo "Adding LABEL ${key} ${value}"
     echo "LABEL ${key} \"${value}\"" >> $sandbox/Dockerfile
 done
