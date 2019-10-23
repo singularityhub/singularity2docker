@@ -3,9 +3,9 @@
 # singularity2docker.sh will convert a singularity image back into a docker
 # image.
 #
-# USAGE: singularity2docker.sh ubuntu.simg
+# USAGE: singularity2docker.sh ubuntu.sif
 #
-# Copyright (C) 2018 Vanessa Sochat.
+# Copyright (C) 2018-2020 Vanessa Sochat.
 #
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License as published by
@@ -31,12 +31,14 @@ if [ $# == 0 ] ; then
     echo "OPTIONS:
 
           -n|--name: docker container name (container:new)
+          --no-cleanup: don't remove build sandbox and Dockerfile within
 
           "
     exit 1;
 fi
 
 container="container:new"
+cleanup="true"
 
 while true; do
     case ${1:-} in
@@ -47,6 +49,10 @@ while true; do
         --name|-n|n)
             shift
             container="${1:-}";
+            shift
+        ;;
+        --no-cleanup)
+            cleanup="false";
             shift
         ;;
         -*)
@@ -63,6 +69,7 @@ image=$1
 
 echo ""
 echo "Input Image: ${image}"
+echo "Cleanup: ${cleanup}"
 
 
 
@@ -98,7 +105,6 @@ is_installed singularity
 is_installed docker
 is_installed jq
 
-
 ################################################################################
 ### Image Format ###############################################################
 ################################################################################
@@ -124,8 +130,8 @@ is_installed jq
 echo
 echo "2.  Preparing sandbox for export..."
 sandbox=$(mktemp -d -t singularity2docker.XXXXXX)
-singularity build --sandbox ${sandbox} ${image} > /dev/null 2>&1
-
+rmdir $sandbox
+singularity build --sandbox ${sandbox} ${image}
 
 ################################################################################
 ### Environment/Metadata #######################################################
@@ -147,10 +153,13 @@ echo "ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> 
 
 # Labels
 
-keys=$(singularity inspect -l ${image} | jq 'keys[]')
+# Note: Singularity has not been consistent with output of metadata
+# If you have issues here, you might need to tweak the jq parsing below
+entries=$(singularity inspect -l --json ${image} | jq -r '.attributes .labels')
+keys=$(echo $entries | jq -r 'keys[]')
+
 for key in ${keys}; do
-    term=".${key}"
-    value=$(singularity inspect -l ${image} | jq -r ${term})
+    value=$(singularity inspect -l --json ${image} | jq -r ".attributes .labels[\"${key}\"]")
     echo "Adding LABEL ${key} ${value}"
     echo "LABEL ${key} \"${value}\"" >> $sandbox/Dockerfile
 done
@@ -170,7 +179,13 @@ echo "CMD [\"/bin/bash\", \"run_singularity2docker.sh\"]" >> $sandbox/Dockerfile
 echo
 echo "4.  Build away, Merrill!"
 
-docker build -t ${container} ${sandbox} > /dev/null 2>&1
+docker build -t ${container} ${sandbox}
 echo "Created container ${container}"
 echo "docker inspect ${container}"
-rm -rf ${sandbox}
+
+if [ "$cleanup" == "true" ]; then
+    echo "Cleaning up $sandbox"
+    rm -rf ${sandbox}
+else
+    echo "Sandbox is at $sandbox"
+fi
