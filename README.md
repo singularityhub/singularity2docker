@@ -8,14 +8,15 @@ environment, labels, and runscript. The usage is as follows:
 ```
 
 The above says "Create a new container called newcontainer:tag (-n == name) from
-the Singularity container singularity-container.sif
+the Singularity container singularity-container.sif The other argument you can provide
+to skip cleanup of the sandbox (if you intend to build again) is `--no-cleanup`.
 
 ## Example
 
 ```
-$ ./singularity2docker.sh -n newcontainer:tag singularity-container.simg
+$ ./singularity2docker.sh -n newcontainer:tag singularity-container.sif
 
-Input Image: singularity-container.simg
+Input Image: singularity-container.sif
 
 1. Checking for software dependencies, Singularity and Docker...
 Found Singularity 2.4.5-master.g0b17e18

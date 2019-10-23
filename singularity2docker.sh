@@ -31,12 +31,14 @@ if [ $# == 0 ] ; then
     echo "OPTIONS:
 
           -n|--name: docker container name (container:new)
+          --no-cleanup: don't remove build sandbox and Dockerfile within
 
           "
     exit 1;
 fi
 
 container="container:new"
+cleanup="true"
 
 while true; do
     case ${1:-} in
@@ -47,6 +49,10 @@ while true; do
         --name|-n|n)
             shift
             container="${1:-}";
+            shift
+        ;;
+        --no-cleanup)
+            cleanup="false";
             shift
         ;;
         -*)
@@ -63,6 +69,7 @@ image=$1
 
 echo ""
 echo "Input Image: ${image}"
+echo "Cleanup: ${cleanup}"
 
 
 
@@ -175,4 +182,10 @@ echo "4.  Build away, Merrill!"
 docker build -t ${container} ${sandbox}
 echo "Created container ${container}"
 echo "docker inspect ${container}"
-rm -rf ${sandbox}
+
+if [ "$cleanup" == "true" ]; then
+    echo "Cleaning up $sandbox"
+    rm -rf ${sandbox}
+else
+    echo "Sandbox is at $sandbox"
+fi
