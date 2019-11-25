@@ -155,11 +155,21 @@ echo "ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" >> 
 
 # Note: Singularity has not been consistent with output of metadata
 # If you have issues here, you might need to tweak the jq parsing below
-entries=$(singularity inspect -l --json ${image} | jq -r '.attributes .labels')
+
+# Version 3.5 and up has "data" added back in.
+data_check=$(singularity inspect -l --json ${image} | jq .data)
+
+# Singularity between 2.5 and 3.5, no data attribute
+nesting=".data .attributes .labels"
+if [ "${data_check}" == "null" ]; then  
+    nesting=".attributes .labels"
+fi
+
+entries=$(singularity inspect -l --json ${image} | jq -r "$nesting")
 keys=$(echo $entries | jq -r 'keys[]')
 
 for key in ${keys}; do
-    value=$(singularity inspect -l --json ${image} | jq -r ".attributes .labels[\"${key}\"]")
+    value=$(singularity inspect -l --json ${image} | jq -r "$nesting[\"${key}\"]")
     echo "Adding LABEL ${key} ${value}"
     echo "LABEL ${key} \"${value}\"" >> $sandbox/Dockerfile
 done
@@ -169,7 +179,11 @@ done
 echo "Adding command..."
 echo '#!/bin/sh
 . /environment
-exec /.singularity.d/runscript "$@"' > ${sandbox}/run_singularity2docker.sh
+if [ -f "/.singularity.d/actions/run" ]; then
+    exec /.singularity.d/actions/run "$@" 
+else
+    exec /.singularity.d/runscript "$@"
+fi' > ${sandbox}/run_singularity2docker.sh
 echo "CMD [\"/bin/bash\", \"run_singularity2docker.sh\"]" >> $sandbox/Dockerfile
 
 ################################################################################
