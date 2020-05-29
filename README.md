@@ -10,6 +10,11 @@ environment, labels, and runscript. The usage is as follows:
 The above says "Create a new container called newcontainer:tag (-n == name) from
 the Singularity container singularity-container.sif The other argument you can provide
 to skip cleanup of the sandbox (if you intend to build again) is `--no-cleanup`.
+## Prerequisites
+
+- Singularity
+- Docker
+- jq
 
 ## Example
 
